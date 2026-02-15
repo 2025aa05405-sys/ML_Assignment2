@@ -1,8 +1,7 @@
 import streamlit as st
-import pandas as pd
-import numpy as np
-import pickle
+import json
 import os
+import pickle
 import matplotlib.pyplot as plt
 import seaborn as sns
 
@@ -28,139 +27,125 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Load models and data
-@st.cache_resource
-def load_models():
-    # Models are not loaded at runtime; results are pre-computed
-    return {}
-
-@st.cache_resource
-def load_scaler():
-    # Scaler not needed; using pre-computed results
-    return None
-
-@st.cache_resource
-def load_income_mapping():
-    with open('model/income_mapping.pkl', 'rb') as f:
-        return pickle.load(f)
-
+# Load data from JSON files
 @st.cache_data
 def load_results():
-    if os.path.exists('model_results.csv'):
-        return pd.read_csv('model_results.csv', index_col=0)
+    if os.path.exists('model/model_results.json'):
+        with open('model/model_results.json', 'r') as f:
+            return json.load(f)
     return None
 
 @st.cache_data
 def load_test_data():
-    if os.path.exists('test_data.csv'):
-        return pd.read_csv('test_data.csv')
+    if os.path.exists('model/test_data.json'):
+        with open('model/test_data.json', 'r') as f:
+            return json.load(f)
     return None
 
-# Title and Description
+@st.cache_resource
+def load_income_mapping():
+    if os.path.exists('model/income_mapping.pkl'):
+        with open('model/income_mapping.pkl', 'rb') as f:
+            return pickle.load(f)
+    return {0: "≤ $50K", 1: "> $50K"}
+
+# Title
 st.title("💰 Adult Income Classification")
 st.markdown("### ML Assignment: Binary Classification with Multiple Models")
 
-# Sidebar for navigation
+# Sidebar navigation
 st.sidebar.title("Navigation")
 page = st.sidebar.radio(
     "Select a page:",
     ["📊 Model Metrics", "🧪 Make Predictions", "📈 Model Comparison", "📥 Dataset Info"]
 )
 
-# Load all resources
+# Load resources
 income_mapping = load_income_mapping()
-results_df = load_results()
+results_data = load_results()
 test_data = load_test_data()
 
 if page == "📊 Model Metrics":
     st.header("Model Performance Metrics")
     
-    if results_df is not None:
+    if results_data:
         st.subheader("Evaluation Metrics Comparison")
+        st.dataframe(results_data, use_container_width=True)
         
-        # Display results table
-        st.dataframe(
-            results_df.style.format("{:.4f}").background_gradient(cmap="RdYlGn"),
-            use_container_width=True
-        )
-        
-        # Download results as CSV
-        csv = results_df.to_csv()
+        # Download
+        json_str = json.dumps(results_data, indent=2)
         st.download_button(
-            label="📥 Download Metrics (CSV)",
-            data=csv,
-            file_name="model_metrics.csv",
-            mime="text/csv"
+            label="📥 Download Metrics (JSON)",
+            data=json_str,
+            file_name="model_metrics.json",
+            mime="application/json"
         )
         
-        # Best models for each metric
+        # Best models
         st.subheader("🏆 Best Models by Metric")
+        metrics = ['Accuracy', 'AUC', 'Precision', 'Recall', 'F1', 'MCC']
+        
+        best_acc = max(results_data, key=lambda x: x.get('Accuracy', 0))
+        best_f1 = max(results_data, key=lambda x: x.get('F1', 0))
+        best_auc = max(results_data, key=lambda x: x.get('AUC', 0))
+        best_prec = max(results_data, key=lambda x: x.get('Precision', 0))
+        best_rec = max(results_data, key=lambda x: x.get('Recall', 0))
+        best_mcc = max(results_data, key=lambda x: x.get('MCC', 0))
+        
         col1, col2, col3 = st.columns(3)
-        
         with col1:
-            st.metric("Best Accuracy", results_df['Accuracy'].idxmax(), 
-                     f"{results_df['Accuracy'].max():.4f}")
-            st.metric("Best F1 Score", results_df['F1'].idxmax(), 
-                     f"{results_df['F1'].max():.4f}")
-        
+            model_key = [k for k in best_acc.keys() if k not in metrics][0]
+            st.metric("Best Accuracy", best_acc[model_key], f"{best_acc.get('Accuracy', 0):.4f}")
+            st.metric("Best F1 Score", best_f1.get(model_key, 'N/A'), f"{best_f1.get('F1', 0):.4f}")
         with col2:
-            st.metric("Best AUC", results_df['AUC'].idxmax(), 
-                     f"{results_df['AUC'].max():.4f}")
-            st.metric("Best Precision", results_df['Precision'].idxmax(), 
-                     f"{results_df['Precision'].max():.4f}")
-        
+            st.metric("Best AUC", best_auc.get(model_key, 'N/A'), f"{best_auc.get('AUC', 0):.4f}")
+            st.metric("Best Precision", best_prec.get(model_key, 'N/A'), f"{best_prec.get('Precision', 0):.4f}")
         with col3:
-            st.metric("Best Recall", results_df['Recall'].idxmax(), 
-                     f"{results_df['Recall'].max():.4f}")
-            st.metric("Best MCC", results_df['MCC'].idxmax(), 
-                     f"{results_df['MCC'].max():.4f}")
+            st.metric("Best Recall", best_rec.get(model_key, 'N/A'), f"{best_rec.get('Recall', 0):.4f}")
+            st.metric("Best MCC", best_mcc.get(model_key, 'N/A'), f"{best_mcc.get('MCC', 0):.4f}")
         
         # Visualization
         st.subheader("📉 Metrics Visualization")
         fig, axes = plt.subplots(2, 3, figsize=(15, 8))
         fig.suptitle('Model Performance Across Metrics', fontsize=16, fontweight='bold')
-        
         axes = axes.flatten()
-        metrics = ['Accuracy', 'AUC', 'Precision', 'Recall', 'F1', 'MCC']
-        colors = plt.cm.Set3(np.linspace(0, 1, len(results_df)))
         
+        model_names = [k for k in results_data[0].keys() if k not in metrics]
         for idx, metric in enumerate(metrics):
-            axes[idx].barh(results_df.index, results_df[metric], color=colors)
+            values = [row.get(metric, 0) for row in results_data]
+            axes[idx].barh(model_names, values, color=plt.cm.Set3(range(len(results_data))))
             axes[idx].set_xlabel(metric)
             axes[idx].set_title(f'{metric} Comparison')
             axes[idx].set_xlim(0, 1)
-            for i, v in enumerate(results_df[metric]):
+            for i, v in enumerate(values):
                 axes[idx].text(v + 0.02, i, f'{v:.3f}', va='center')
         
         plt.tight_layout()
         st.pyplot(fig)
 
-
 elif page == "🧪 Make Predictions":
     st.header("Test Model Predictions")
-    st.info("ℹ️ **Static Predictions (Pre-Computed)**\n\nModels have been trained locally. Predictions are displayed from pre-computed results to ensure fast cloud deployment.\n\nTo test custom predictions, download the test data and run the models locally using the repository code.")
-
+    st.info("ℹ️ **Static Results (Pre-Computed)**\n\nModels have been trained locally. To test custom predictions, download the test data and run the models locally using the repository code.")
 
 elif page == "📈 Model Comparison":
     st.header("Model Performance Comparison")
     
-    if results_df is not None:
-        # Bar chart comparison
-        st.subheader("Model Performance Metrics")
+    if results_data:
+        st.subheader("Model Performance Overview")
+        metrics = ['Accuracy', 'AUC', 'Precision', 'Recall', 'F1', 'MCC']
+        model_names = [k for k in results_data[0].keys() if k not in metrics]
         
         fig, axes = plt.subplots(2, 3, figsize=(15, 8))
         fig.suptitle('Model Performance Across Metrics', fontsize=16, fontweight='bold')
-        
         axes = axes.flatten()
-        metrics = ['Accuracy', 'AUC', 'Precision', 'Recall', 'F1', 'MCC']
-        colors = plt.cm.Set3(np.linspace(0, 1, len(results_df)))
         
         for idx, metric in enumerate(metrics):
-            axes[idx].barh(results_df.index, results_df[metric], color=colors)
+            values = [row.get(metric, 0) for row in results_data]
+            axes[idx].barh(model_names, values, color=plt.cm.Set3(range(len(results_data))))
             axes[idx].set_xlabel(metric)
             axes[idx].set_title(f'{metric} Comparison')
             axes[idx].set_xlim(0, 1)
-            for i, v in enumerate(results_df[metric]):
+            for i, v in enumerate(values):
                 axes[idx].text(v + 0.02, i, f'{v:.3f}', va='center')
         
         plt.tight_layout()
@@ -169,83 +154,67 @@ elif page == "📈 Model Comparison":
         # Heatmap
         st.subheader("Heatmap - All Metrics")
         fig, ax = plt.subplots(figsize=(10, 6))
-        sns.heatmap(results_df, annot=True, fmt='.4f', cmap='RdYlGn', 
-                   cbar_kws={'label': 'Score'}, ax=ax, vmin=0, vmax=1)
+        heatmap_values = [[row.get(m, 0) for m in metrics] for row in results_data]
+        sns.heatmap(heatmap_values, annot=True, fmt='.4f', cmap='RdYlGn', 
+                   cbar_kws={'label': 'Score'}, ax=ax, vmin=0, vmax=1,
+                   xticklabels=metrics, yticklabels=model_names)
         ax.set_title('Model Performance Heatmap', fontweight='bold', fontsize=12)
         st.pyplot(fig)
 
-
 elif page == "📥 Dataset Info":
     st.header("Dataset Information")
-    
     st.subheader("Adult Income Census Dataset")
-    
     st.markdown("""
     **Dataset Overview:**
     - **Source:** UCI Machine Learning Repository
     - **Target:** Binary Income Classification (≤ $50K, > $50K)
-    - **Number of Instances:** 32,561 samples
-    - **Number of Features:** 14 attributes
-    - **Feature Types:** Continuous and Categorical
+    - **Instances:** 32,561 samples | **Features:** 14 attributes
     
     **Description:**
-    The Adult dataset is a benchmark dataset extracted from the 1994 U.S. Census database.
-    It is commonly used for binary classification tasks to predict whether an individual's 
-    income exceeds $50K/year based on demographic information.
-    
-    **Target Variable:**
-    - **Class 0:** Income ≤ $50K (negative class)
-    - **Class 1:** Income > $50K (positive class)
-    
-    **Features Include:**
-    - Age, Education, Marital Status, Occupation, Relationship
-    - Race, Sex, Capital Gain/Loss, Hours per Week, Native Country, etc.
+    The Adult dataset is extracted from the 1994 U.S. Census database. It is commonly used 
+    for binary classification tasks to predict whether an individual's income exceeds $50K/year 
+    based on demographic information.
     """)
     
-    if test_data is not None:
+    if test_data:
         st.subheader("Test Dataset Statistics")
-        
         col1, col2, col3 = st.columns(3)
         with col1:
-            st.metric("Number of Samples", len(test_data))
+            st.metric("Samples", len(test_data))
         with col2:
-            st.metric("Number of Features", len(test_data.columns) - 1)
+            st.metric("Features", len(test_data[0]) if test_data else 0)
         with col3:
-            if 'Income' in test_data.columns:
-                st.metric("Number of Classes", test_data['Income'].nunique())
+            income_vals = set(row.get('Income', '') for row in test_data)
+            st.metric("Classes", len(income_vals))
         
-        st.subheader("Feature Statistics")
-        st.dataframe(test_data.describe(), use_container_width=True)
+        st.subheader("Sample Data")
+        st.dataframe(test_data[:10], use_container_width=True)
         
         st.subheader("Income Distribution")
-        if 'Income' in test_data.columns:
-            income_counts = test_data['Income'].value_counts()
-            
+        income_counts = {}
+        for row in test_data:
+            income = row.get('Income', 'Unknown')
+            income_counts[income] = income_counts.get(income, 0) + 1
+        
+        if income_counts:
             fig, ax = plt.subplots(figsize=(10, 5))
-            bars = ax.bar(income_counts.index.astype(str), income_counts.values, color=plt.cm.Set3(np.linspace(0, 1, 2)))
+            ax.bar(income_counts.keys(), income_counts.values(), color=plt.cm.Set3(range(len(income_counts))))
             ax.set_ylabel('Count')
-            ax.set_title('Income Distribution in Test Dataset')
+            ax.set_title('Income Distribution')
             ax.tick_params(axis='x', rotation=45)
-            
-            for bar in bars:
-                height = bar.get_height()
-                ax.text(bar.get_x() + bar.get_width()/2., height,
-                       f'{int(height)}', ha='center', va='bottom')
-            
+            for i, (k, v) in enumerate(income_counts.items()):
+                ax.text(i, v + 100, str(v), ha='center')
             plt.tight_layout()
             st.pyplot(fig)
         
-        # Download test data
         st.subheader("📥 Download Test Data")
-        csv = test_data.to_csv(index=False)
+        json_str = json.dumps(test_data, indent=2)
         st.download_button(
-            label="Download Test Data (CSV)",
-            data=csv,
-            file_name="test_data.csv",
-            mime="text/csv"
+            label="Download Test Data (JSON)",
+            data=json_str,
+            file_name="test_data.json",
+            mime="application/json"
         )
-        
-        st.info("Use this test data to evaluate the models with your own predictions!")
 
 # Footer
 st.markdown("---")
