@@ -125,7 +125,83 @@ if page == "📊 Model Metrics":
 
 elif page == "🧪 Make Predictions":
     st.header("Test Model Predictions")
-    st.info("ℹ️ **Static Results (Pre-Computed)**\n\nModels have been trained locally. To test custom predictions, download the test data and run the models locally using the repository code.")
+    
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        st.subheader("Select Model & Upload Test Data")
+        selected_model = st.selectbox(
+            "Choose a classification model:",
+            [k for k in results_data[0].keys() if k not in ['Accuracy', 'AUC', 'Precision', 'Recall', 'F1', 'MCC']],
+            key="model_select"
+        )
+    
+    with col2:
+        st.write("**Model Selection**")
+    
+    st.markdown("---")
+    
+    # CSV Upload
+    st.subheader("📥 Upload Test Data (CSV)")
+    
+    uploaded_file = st.file_uploader(
+        "Upload a CSV file with demographic data (without Income column for predictions):",
+        type="csv",
+        key="csv_upload"
+    )
+    
+    if uploaded_file is not None:
+        st.info("✓ File uploaded successfully! Note: To make predictions, use the model files locally (download below).")
+        st.success(f"File size: {len(uploaded_file.read())} bytes")
+        uploaded_file.seek(0)  # Reset file pointer
+    
+    # Pre-computed Confusion Matrix
+    st.subheader("🔲 Confusion Matrix")
+    
+    # Convert model name to file format
+    model_file_name = selected_model.replace(' ', '_').lower()
+    cm_image_path = f'model/confusion_matrix_{model_file_name}.png'
+    
+    if os.path.exists(cm_image_path):
+        image = st.image(cm_image_path, use_container_width=True)
+        st.caption(f"Confusion Matrix for {selected_model} (Test Data)")
+    else:
+        st.warning(f"Confusion matrix image not found for {selected_model}")
+    
+    # Classification Report
+    st.subheader("📋 Classification Report")
+    
+    # Load classification reports
+    if os.path.exists('model/classification_reports.json'):
+        with open('model/classification_reports.json', 'r') as f:
+            all_reports = json.load(f)
+        
+        if selected_model in all_reports:
+            report = all_reports[selected_model]
+            
+            # Display report as table
+            report_display = {}
+            for key, val in report.items():
+                if isinstance(val, dict):
+                    report_display[key] = val
+            
+            st.json(report_display)
+        else:
+            st.warning(f"Report not found for {selected_model}")
+    
+    st.info("💡 **To make predictions on new data:** Download the repository, install scikit-learn locally, and use `train_models.py` to train models, then use the saved pickle files for inference.")
+    
+    st.markdown("---")
+    
+    # Download test data
+    st.subheader("📤 Download TestData")
+    if test_data:
+        json_str = json.dumps(test_data, indent=2)
+        st.download_button(
+            label="Download Test Data (JSON)",
+            data=json_str,
+            file_name="test_data.json",
+            mime="application/json"
+        )
 
 elif page == "📈 Model Comparison":
     st.header("Model Performance Comparison")
