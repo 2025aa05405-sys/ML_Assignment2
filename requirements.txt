@@ -1,10 +1,6 @@
 streamlit==1.28.1
-# Ensure numpy/pandas installed before scikit-learn to avoid source builds
-# Added `scipy` and pinned scikit-learn to a version with known binary wheels for py3.13
+# Minimal deps: prebuilt wheels only (no source builds on py3.13)
 numpy==1.26.4
 pandas==2.1.2
-scipy==1.11.3
-scikit-learn==1.5.1
 matplotlib==3.8.1
 seaborn==0.13.0
-xgboost==2.0.2
