@@ -7,6 +7,13 @@ from sklearn.metrics import confusion_matrix, classification_report, accuracy_sc
 import matplotlib.pyplot as plt
 import seaborn as sns
 
+# Helper function to convert income strings to numeric
+def income_to_numeric(income_val):
+    """Convert income string to numeric (0 or 1)"""
+    if isinstance(income_val, str):
+        return 0 if '<= 50K' in income_val or '<=50K' in income_val else 1
+    return int(income_val)
+
 # Configure page
 st.set_page_config(
     page_title="HAR Classification - ML Assignment",
@@ -179,9 +186,9 @@ elif page == "🧪 Make Predictions":
                 user_data = pd.read_csv(uploaded_file)
                 st.success(f"✓ File uploaded successfully! Shape: {user_data.shape}")
                 
-                if 'Activity' in user_data.columns:
-                    X_user = user_data.drop('Activity', axis=1).values
-                    y_user = user_data['Activity'].values
+                if 'Income' in user_data.columns:
+                    X_user = user_data.drop('Income', axis=1).values
+                    y_user = np.array([income_to_numeric(val) for val in user_data['Income'].values])
                 else:
                     X_user = user_data.values
                     y_user = None
@@ -203,7 +210,7 @@ elif page == "🧪 Make Predictions":
                 }
                 
                 if y_user is not None:
-                    results_data['Actual Income'] = [income_mapping.get(p, f"Class {p}") for p in y_user]
+                    results_data['Actual Income'] = [income_mapping.get(int(p), f"Class {int(p)}") for p in y_user]
                     results_data['Correct'] = predictions == y_user
                 
                 results_display_df = pd.DataFrame(results_data)
@@ -212,7 +219,7 @@ elif page == "🧪 Make Predictions":
                 # Confusion Matrix if true labels exist
                 if y_user is not None:
                     st.subheader("🔲 Confusion Matrix")
-                    cm = confusion_matrix(y_user, predictions)
+                    cm = confusion_matrix(y_user.astype(int), predictions)
                     
                     fig, ax = plt.subplots(figsize=(8, 6))
                     sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', ax=ax,
@@ -225,13 +232,13 @@ elif page == "🧪 Make Predictions":
                     
                     # Classification Report
                     st.subheader("📋 Classification Report")
-                    report = classification_report(y_user, predictions, 
+                    report = classification_report(y_user.astype(int), predictions, 
                                                  target_names=[income_mapping.get(0, 'Class 0'), income_mapping.get(1, 'Class 1')],
                                                  output_dict=True)
                     report_df = pd.DataFrame(report).transpose()
                     st.dataframe(report_df.style.format("{:.4f}"), use_container_width=True)
                     
-                    accuracy = accuracy_score(y_user, predictions)
+                    accuracy = accuracy_score(y_user.astype(int), predictions)
                     st.info(f"✓ **Accuracy on Uploaded Data:** {accuracy:.4f}")
                 
                 # Download predictions
@@ -262,7 +269,7 @@ elif page == "🧪 Make Predictions":
                 
                 if 'Income' in sample_data.columns:
                     X_sample = sample_data.drop('Income', axis=1).values
-                    y_sample = sample_data['Income'].values
+                    y_sample = np.array([income_to_numeric(val) for val in sample_data['Income'].values])
                 else:
                     X_sample = sample_data.values
                     y_sample = None
@@ -285,8 +292,8 @@ elif page == "🧪 Make Predictions":
                     
                     with col2:
                         if y_sample is not None:
-                            actual = income_mapping.get(y_sample[i], f"Class {y_sample[i]}")
-                            is_correct = predictions[i] == y_sample[i]
+                            actual = income_mapping.get(int(y_sample[i]), f"Class {int(y_sample[i])}")
+                            is_correct = predictions[i] == int(y_sample[i])
                             status = "✓ Correct" if is_correct else "✗ Incorrect"
                             st.write(f"Actual Income: **{actual}**")
                             st.write(f"Status: **{status}**")
@@ -373,19 +380,18 @@ elif page == "📥 Dataset Info":
         with col2:
             st.metric("Number of Features", len(test_data.columns) - 1)
         with col3:
-            if 'Activity' in test_data.columns:
-                st.metric("Number of Classes", test_data['Activity'].nunique())
+            if 'Income' in test_data.columns:
+                st.metric("Number of Classes", test_data['Income'].nunique())
         
         st.subheader("Feature Statistics")
         st.dataframe(test_data.describe(), use_container_width=True)
         
         st.subheader("Income Distribution")
         if 'Income' in test_data.columns:
-            income_counts = test_data['Income'].value_counts().sort_index()
-            income_labels = [income_mapping.get(int(i), f"Class {i}") for i in income_counts.index]
+            income_counts = test_data['Income'].value_counts()
             
             fig, ax = plt.subplots(figsize=(10, 5))
-            bars = ax.bar(income_labels, income_counts.values, color=plt.cm.Set3(np.linspace(0, 1, 2)))
+            bars = ax.bar(income_counts.index.astype(str), income_counts.values, color=plt.cm.Set3(np.linspace(0, 1, 2)))
             ax.set_ylabel('Count')
             ax.set_title('Income Distribution in Test Dataset')
             ax.tick_params(axis='x', rotation=45)
